@@ -1,16 +1,18 @@
 security:
-  oauth2:
-    client:
-      clientId: 233668646673605
-      clientSecret: 33b17e044ee6a4fa383f46ec6e28ea1d
-      accessTokenUri: https://graph.facebook.com/oauth/access_token
-      userAuthorizationUri: https://www.facebook.com/dialog/oauth
-      tokenName: oauth_token
-      authenticationScheme: query
-      clientAuthenticationScheme: form
-    resource:
-      userInfoUri: https://graph.facebook.com/me
-
+ oauth2:
+   client:
+     clientId: deea87d5-4fd3-4128-baf0-51a4375698a4
+     clientSecret: npIaJFwVFn2KOX7FNoAsDQ3MDEjoch+HJlWelCyJIec=
+     accessTokenUri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/oauth2/token
+     userAuthorizationUri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/oauth2/authorize
+     clientAuthenticationScheme: form
+     scope: openid
+   resource:
+     userInfoUri: https://graph.windows.net/me?api-version=1.6
+     jwt:
+      key-uri: https://login.microsoftonline.com/yourcustomer.onmicrosoft.com/discovery/v2.0/keys
+      
+       
 logging:
   level:
     org.springframework.security: DEBUG
