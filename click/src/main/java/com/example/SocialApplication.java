@@ -40,17 +40,19 @@ import org.springframework.security.oauth2.client.token.AccessTokenProvider;
 import org.springframework.security.oauth2.client.token.AccessTokenProviderChain;
 import org.springframework.security.oauth2.client.token.grant.client.ClientCredentialsAccessTokenProvider;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
+import org.springframework.security.oauth2.provider.token.ResourceServerTokenServices;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
 @SpringBootApplication
 @EnableOAuth2Client
 @RestController
 public class SocialApplication extends WebSecurityConfigurerAdapter {
-	
-	  @Autowired
-	  OAuth2ClientContext oauth2ClientContext;	
-	
+
+	@Autowired
+	OAuth2ClientContext oauth2ClientContext;
+
 	@RequestMapping("/user")
 	public Principal user(Principal principal) {
 		return principal;
@@ -59,30 +61,29 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
-				.authenticated().and()
-				.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+				.authenticated().and().addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
 
 		http.csrf().disable();
 	}
 
 	private Filter ssoFilter() {
-		OAuth2ClientAuthenticationProcessingFilter facebookFilter = new OAuth2ClientAuthenticationProcessingFilter(
+		OAuth2ClientAuthenticationProcessingFilter azureFilter = new OAuth2ClientAuthenticationProcessingFilter(
 				"/login");
 		OAuth2RestTemplate facebookTemplate = new OAuth2RestTemplate(facebook(), oauth2ClientContext);
 		facebookTemplate.setAccessTokenProvider(accessTokenProvider());
 
-		facebookFilter.setRestTemplate(facebookTemplate);
+		azureFilter.setRestTemplate(facebookTemplate);
 
-		facebookFilter.setTokenServices(
-				new UserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));
-		return facebookFilter;
+		azureFilter.setTokenServices(
+				new AzureUserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));
+		return azureFilter;
 	}
 
-    @Bean(name = "accessTokenProvider")
-    public AccessTokenProvider accessTokenProvider() {
+	@Bean(name = "accessTokenProvider")
+	public AccessTokenProvider accessTokenProvider() {
 
-        AzureIdTokenProvider authorizationCodeAccessTokenProvider = new AzureIdTokenProvider();
-        authorizationCodeAccessTokenProvider.setTokenRequestEnhancer(new AzureRequestEnhancer());
+		AzureIdTokenProvider authorizationCodeAccessTokenProvider = new AzureIdTokenProvider();
+		authorizationCodeAccessTokenProvider.setTokenRequestEnhancer(new AzureRequestEnhancer());
 
 		// return authorizationCodeAccessTokenProvider;
 		/*
@@ -96,42 +97,41 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 
 		return new AccessTokenProviderChain(Arrays.<AccessTokenProvider> asList(authorizationCodeAccessTokenProvider,
 				clientCredentialsAccessTokenProvider));
-        
-        /*
-        return new AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
-                authorizationCodeAccessTokenProvider,
-                implicitAccessTokenProvider,
-                resourceOwnerPasswordAccessTokenProvider,
-                clientCredentialsAccessTokenProvider));
- 
-         */
-    }
 
-  @Bean
-  @ConfigurationProperties("facebook.resource")
-  ResourceServerProperties facebookResource() {
-	  ResourceServerProperties res =  new ResourceServerProperties();
+		/*
+		 * return new
+		 * AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
+		 * authorizationCodeAccessTokenProvider, implicitAccessTokenProvider,
+		 * resourceOwnerPasswordAccessTokenProvider,
+		 * clientCredentialsAccessTokenProvider));
+		 * 
+		 */
+	}
 
-	   return res;
-  }	
-	
-  @Bean
-  @ConfigurationProperties("facebook.client")
-  OAuth2ProtectedResourceDetails facebook() {
-	  OAuth2ProtectedResourceDetails res = new AzureResourceDetails();
-	  return res;
-  }  
-  
-  @Bean
-  public FilterRegistrationBean oauth2ClientFilterRegistration(
-      OAuth2ClientContextFilter filter) {
-    FilterRegistrationBean registration = new FilterRegistrationBean();
-    registration.setFilter(filter);
-    registration.setOrder(-100);
-    return registration;
-  }
-  
-  public static void main(String[] args) {
-    SpringApplication.run(SocialApplication.class, args);
-  }
+	@Bean
+	@ConfigurationProperties("facebook.resource")
+	ResourceServerProperties facebookResource() {
+		ResourceServerProperties res = new ResourceServerProperties();
+
+		return res;
+	}
+
+	@Bean
+	@ConfigurationProperties("facebook.client")
+	OAuth2ProtectedResourceDetails facebook() {
+		OAuth2ProtectedResourceDetails res = new AzureResourceDetails();
+		return res;
+	}
+
+	@Bean
+	public FilterRegistrationBean oauth2ClientFilterRegistration(OAuth2ClientContextFilter filter) {
+		FilterRegistrationBean registration = new FilterRegistrationBean();
+		registration.setFilter(filter);
+		registration.setOrder(-100);
+		return registration;
+	}
+
+	public static void main(String[] args) {
+		SpringApplication.run(SocialApplication.class, args);
+	}
 }
