@@ -9,12 +9,19 @@ public class AzureUserInfoTokenServices extends UserInfoTokenServices {
 
 	public AzureUserInfoTokenServices(String userInfoEndpointUrl, String clientId) {
 		super(userInfoEndpointUrl, clientId);
+		
+		this.setPrincipalExtractor(new AzurePrincipalExtractor());
 	}
 	
 	@Override
 	public OAuth2Authentication loadAuthentication(String accessToken)
 			throws AuthenticationException, InvalidTokenException {
-		return super.loadAuthentication(accessToken);
+		OAuth2Authentication token = super.loadAuthentication(accessToken);
+		
+//		UsernamePasswordAuthenticationToken authToken =
+//				(UsernamePasswordAuthenticationToken) token.getUserAuthentication();
+//		
+		
+		return token;
 	}
-
 }
