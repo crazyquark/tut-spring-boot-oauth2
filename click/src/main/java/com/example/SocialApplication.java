@@ -29,7 +29,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.security.oauth2.client.EnableOAuth2Sso;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.ResourceServerProperties;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.UserInfoTokenServices;
 import org.springframework.boot.context.embedded.FilterRegistrationBean;
@@ -46,11 +45,8 @@ import org.springframework.security.oauth2.client.token.AccessTokenProvider;
 import org.springframework.security.oauth2.client.token.AccessTokenProviderChain;
 import org.springframework.security.oauth2.client.token.grant.client.ClientCredentialsAccessTokenProvider;
 import org.springframework.security.oauth2.client.token.grant.code.AuthorizationCodeResourceDetails;
-import org.springframework.security.oauth2.client.token.grant.implicit.ImplicitAccessTokenProvider;
-import org.springframework.security.oauth2.client.token.grant.password.ResourceOwnerPasswordAccessTokenProvider;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
-import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
@@ -61,13 +57,13 @@ import org.springframework.web.util.WebUtils;
 
 @SpringBootApplication
 @EnableOAuth2Client
-//@EnableOAuth2Sso
+// @EnableOAuth2Sso
 @RestController
 public class SocialApplication extends WebSecurityConfigurerAdapter {
-	
-	  @Autowired
-	  OAuth2ClientContext oauth2ClientContext;	
-	
+
+	@Autowired
+	OAuth2ClientContext oauth2ClientContext;
+
 	@RequestMapping("/user")
 	public Principal user(Principal principal) {
 		return principal;
@@ -76,114 +72,110 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
-				.authenticated()
-	            .and()
-//                .csrf()
-//                    .csrfTokenRepository(csrfTokenRepository())
-//                 .and()
-//                 	.addFilterAfter(csrfHeaderFilter(), CsrfFilter.class)				
-                 	.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class)
-				;
-		
+				.authenticated().and()
+				// .csrf()
+				// .csrfTokenRepository(csrfTokenRepository())
+				// .and()
+				// .addFilterAfter(csrfHeaderFilter(), CsrfFilter.class)
+				.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
 		http.csrf().disable();
 	}
 
 	private Filter ssoFilter() {
-		  OAuth2ClientAuthenticationProcessingFilter facebookFilter = new OAuth2ClientAuthenticationProcessingFilter("/login");
-		  OAuth2RestTemplate facebookTemplate = new OAuth2RestTemplate(facebook(), oauth2ClientContext);
-		  facebookTemplate.setAccessTokenProvider(accessTokenProvider());		  
-		  
-		  facebookFilter.setRestTemplate(facebookTemplate);
-		  
-		  facebookFilter.setTokenServices(new UserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));		  
-		  return facebookFilter;
+		OAuth2ClientAuthenticationProcessingFilter facebookFilter = new OAuth2ClientAuthenticationProcessingFilter(
+				"/login");
+		OAuth2RestTemplate facebookTemplate = new OAuth2RestTemplate(facebook(), oauth2ClientContext);
+		facebookTemplate.setAccessTokenProvider(accessTokenProvider());
+
+		facebookFilter.setRestTemplate(facebookTemplate);
+
+		facebookFilter.setTokenServices(
+				new UserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));
+		return facebookFilter;
 	}
 
-    @Bean(name = "accessTokenProvider")
-    public AccessTokenProvider accessTokenProvider() {
+	@Bean(name = "accessTokenProvider")
+	public AccessTokenProvider accessTokenProvider() {
 
-        AzureIdTokenProvider authorizationCodeAccessTokenProvider = new AzureIdTokenProvider();
-        authorizationCodeAccessTokenProvider.setTokenRequestEnhancer(new AzureRequestEnhancer());
-        
-        //return authorizationCodeAccessTokenProvider;
-/*
-        ImplicitAccessTokenProvider implicitAccessTokenProvider = new ImplicitAccessTokenProvider();
-        ResourceOwnerPasswordAccessTokenProvider resourceOwnerPasswordAccessTokenProvider = new ResourceOwnerPasswordAccessTokenProvider();
-        */
-        ClientCredentialsAccessTokenProvider clientCredentialsAccessTokenProvider = new ClientCredentialsAccessTokenProvider();
+		AzureIdTokenProvider authorizationCodeAccessTokenProvider = new AzureIdTokenProvider();
+		authorizationCodeAccessTokenProvider.setTokenRequestEnhancer(new AzureRequestEnhancer());
 
-        return new AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
-                authorizationCodeAccessTokenProvider,
-                clientCredentialsAccessTokenProvider));
-        
-        /*
-        return new AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
-                authorizationCodeAccessTokenProvider,
-                implicitAccessTokenProvider,
-                resourceOwnerPasswordAccessTokenProvider,
-                clientCredentialsAccessTokenProvider));
- 
-         */
-    }
+		// return authorizationCodeAccessTokenProvider;
+		/*
+		 * ImplicitAccessTokenProvider implicitAccessTokenProvider = new
+		 * ImplicitAccessTokenProvider();
+		 * ResourceOwnerPasswordAccessTokenProvider
+		 * resourceOwnerPasswordAccessTokenProvider = new
+		 * ResourceOwnerPasswordAccessTokenProvider();
+		 */
+		ClientCredentialsAccessTokenProvider clientCredentialsAccessTokenProvider = new ClientCredentialsAccessTokenProvider();
+
+		return new AccessTokenProviderChain(Arrays.<AccessTokenProvider> asList(authorizationCodeAccessTokenProvider,
+				clientCredentialsAccessTokenProvider));
+
+		/*
+		 * return new
+		 * AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
+		 * authorizationCodeAccessTokenProvider, implicitAccessTokenProvider,
+		 * resourceOwnerPasswordAccessTokenProvider,
+		 * clientCredentialsAccessTokenProvider));
+		 * 
+		 */
+	}
 
 	@Bean
-  @ConfigurationProperties("facebook.resource")
-  ResourceServerProperties facebookResource() {
-	  ResourceServerProperties res =  new ResourceServerProperties();
+	@ConfigurationProperties("facebook.resource")
+	ResourceServerProperties facebookResource() {
+		ResourceServerProperties res = new ResourceServerProperties();
 
-	   return res;
-  }	
-	
-  @Bean
-  @ConfigurationProperties("facebook.client")
-  OAuth2ProtectedResourceDetails facebook() {
-	  OAuth2ProtectedResourceDetails res = new AuthorizationCodeResourceDetails();
-	  return res;
-  }  
-  
-  @Bean
-  public FilterRegistrationBean oauth2ClientFilterRegistration(
-      OAuth2ClientContextFilter filter) {
-    FilterRegistrationBean registration = new FilterRegistrationBean();
-    registration.setFilter(filter);
-    registration.setOrder(-100);
-    return registration;
-  }  
+		return res;
+	}
 
-  
+	@Bean
+	@ConfigurationProperties("facebook.client")
+	OAuth2ProtectedResourceDetails facebook() {
+		OAuth2ProtectedResourceDetails res = new AuthorizationCodeResourceDetails();
+		return res;
+	}
 
-  private Filter csrfHeaderFilter() {
+	@Bean
+	public FilterRegistrationBean oauth2ClientFilterRegistration(OAuth2ClientContextFilter filter) {
+		FilterRegistrationBean registration = new FilterRegistrationBean();
+		registration.setFilter(filter);
+		registration.setOrder(-100);
+		return registration;
+	}
 
-      return new OncePerRequestFilter() {
-          @Override
-          protected void doFilterInternal(HttpServletRequest request,
-                                          HttpServletResponse response, FilterChain filterChain)
-                  throws ServletException, IOException {
-              CsrfToken csrf = (CsrfToken) request
-                      .getAttribute(CsrfToken.class.getName());
-              if (csrf != null) {
-                  Cookie cookie = WebUtils.getCookie(request, "XSRF-TOKEN");
-                  String token = csrf.getToken();
-                  if (cookie == null
-                          || token != null && !token.equals(cookie.getValue())) {
-                      cookie = new Cookie("XSRF-TOKEN", token);
-                      cookie.setPath("/");
-                      response.addCookie(cookie);
-                  }
-              }
-              filterChain.doFilter(request, response);
-          }
-      };
-  }
+	private Filter csrfHeaderFilter() {
 
-  private CsrfTokenRepository csrfTokenRepository() {
+		return new OncePerRequestFilter() {
+			@Override
+			protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+					FilterChain filterChain) throws ServletException, IOException {
+				CsrfToken csrf = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+				if (csrf != null) {
+					Cookie cookie = WebUtils.getCookie(request, "XSRF-TOKEN");
+					String token = csrf.getToken();
+					if (cookie == null || token != null && !token.equals(cookie.getValue())) {
+						cookie = new Cookie("XSRF-TOKEN", token);
+						cookie.setPath("/");
+						response.addCookie(cookie);
+					}
+				}
+				filterChain.doFilter(request, response);
+			}
+		};
+	}
 
-      HttpSessionCsrfTokenRepository repository = new HttpSessionCsrfTokenRepository();
-      repository.setHeaderName("X-XSRF-TOKEN");
+	private CsrfTokenRepository csrfTokenRepository() {
 
-      return repository;
-  }
-  
+		HttpSessionCsrfTokenRepository repository = new HttpSessionCsrfTokenRepository();
+		repository.setHeaderName("X-XSRF-TOKEN");
+
+		return repository;
+	}
+
 	public static void main(String[] args) {
 		SpringApplication.run(SocialApplication.class, args);
 	}
