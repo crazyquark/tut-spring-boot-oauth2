@@ -45,7 +45,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 @SpringBootApplication
 @EnableOAuth2Client
-//@EnableOAuth2Sso
 @RestController
 public class SocialApplication extends WebSecurityConfigurerAdapter {
 	
@@ -60,24 +59,23 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
-				.authenticated()
-				
-	            .and()
-                 	.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class)
-				;
-		
+				.authenticated().and()
+				.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
 		http.csrf().disable();
 	}
 
 	private Filter ssoFilter() {
-		  OAuth2ClientAuthenticationProcessingFilter facebookFilter = new OAuth2ClientAuthenticationProcessingFilter("/login");
-		  OAuth2RestTemplate facebookTemplate = new OAuth2RestTemplate(facebook(), oauth2ClientContext);
-		  facebookTemplate.setAccessTokenProvider(accessTokenProvider());
-		  
-		  facebookFilter.setRestTemplate(facebookTemplate);
-		  
-		  facebookFilter.setTokenServices(new UserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));		  
-		  return facebookFilter;
+		OAuth2ClientAuthenticationProcessingFilter facebookFilter = new OAuth2ClientAuthenticationProcessingFilter(
+				"/login");
+		OAuth2RestTemplate facebookTemplate = new OAuth2RestTemplate(facebook(), oauth2ClientContext);
+		facebookTemplate.setAccessTokenProvider(accessTokenProvider());
+
+		facebookFilter.setRestTemplate(facebookTemplate);
+
+		facebookFilter.setTokenServices(
+				new UserInfoTokenServices(facebookResource().getUserInfoUri(), facebook().getClientId()));
+		return facebookFilter;
 	}
 
     @Bean(name = "accessTokenProvider")
@@ -85,17 +83,19 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 
         AzureIdTokenProvider authorizationCodeAccessTokenProvider = new AzureIdTokenProvider();
         authorizationCodeAccessTokenProvider.setTokenRequestEnhancer(new AzureRequestEnhancer());
-        
-        //return authorizationCodeAccessTokenProvider;
-/*
-        ImplicitAccessTokenProvider implicitAccessTokenProvider = new ImplicitAccessTokenProvider();
-        ResourceOwnerPasswordAccessTokenProvider resourceOwnerPasswordAccessTokenProvider = new ResourceOwnerPasswordAccessTokenProvider();
-        */
-        ClientCredentialsAccessTokenProvider clientCredentialsAccessTokenProvider = new ClientCredentialsAccessTokenProvider();
 
-        return new AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
-                authorizationCodeAccessTokenProvider,
-                clientCredentialsAccessTokenProvider));
+		// return authorizationCodeAccessTokenProvider;
+		/*
+		 * ImplicitAccessTokenProvider implicitAccessTokenProvider = new
+		 * ImplicitAccessTokenProvider();
+		 * ResourceOwnerPasswordAccessTokenProvider
+		 * resourceOwnerPasswordAccessTokenProvider = new
+		 * ResourceOwnerPasswordAccessTokenProvider();
+		 */
+		ClientCredentialsAccessTokenProvider clientCredentialsAccessTokenProvider = new ClientCredentialsAccessTokenProvider();
+
+		return new AccessTokenProviderChain(Arrays.<AccessTokenProvider> asList(authorizationCodeAccessTokenProvider,
+				clientCredentialsAccessTokenProvider));
         
         /*
         return new AccessTokenProviderChain(Arrays.<AccessTokenProvider>asList(
@@ -107,7 +107,7 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
          */
     }
 
-	@Bean
+  @Bean
   @ConfigurationProperties("facebook.resource")
   ResourceServerProperties facebookResource() {
 	  ResourceServerProperties res =  new ResourceServerProperties();
@@ -129,9 +129,9 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
     registration.setFilter(filter);
     registration.setOrder(-100);
     return registration;
-  }  
-	public static void main(String[] args) {
-		SpringApplication.run(SocialApplication.class, args);
-	}
-
+  }
+  
+  public static void main(String[] args) {
+    SpringApplication.run(SocialApplication.class, args);
+  }
 }
