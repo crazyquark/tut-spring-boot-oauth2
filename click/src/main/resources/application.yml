@@ -9,11 +9,10 @@ facebook:
      token-name: id_token     
      redirect-uri: http://localhost:8080/login
      responseMode: form_post
-     resource: http://localhost:8080/
+     resource: https://graph.windows.net
      scope: openid
    resource:
      userInfoUri: https://graph.windows.net/me?api-version=1.6
-     tokenType: code id_token
      jwt:
       key-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/discovery/v2.0/keys      
            
@@ -29,9 +28,3 @@ security:
       token-info-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/v2.0/.well-known/openid-configuration
       jwt:
         key-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/discovery/v2.0/keys      
-    
-
-spring:
-  resources:
-    chain:
-      enabled: true    

@@ -12,10 +12,11 @@ import org.springframework.security.oauth2.client.resource.OAuth2AccessDeniedExc
 import org.springframework.security.oauth2.client.resource.OAuth2ProtectedResourceDetails;
 import org.springframework.security.oauth2.client.resource.UserApprovalRequiredException;
 import org.springframework.security.oauth2.client.resource.UserRedirectRequiredException;
+import org.springframework.security.oauth2.client.token.AccessTokenProvider;
 import org.springframework.security.oauth2.client.token.AccessTokenRequest;
 import org.springframework.security.oauth2.client.token.DefaultRequestEnhancer;
+import org.springframework.security.oauth2.client.token.OAuth2AccessTokenSupport;
 import org.springframework.security.oauth2.client.token.RequestEnhancer;
-import org.springframework.security.oauth2.client.token.grant.code.AuthorizationCodeAccessTokenProvider;
 import org.springframework.security.oauth2.client.token.grant.code.AuthorizationCodeResourceDetails;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.security.oauth2.common.OAuth2RefreshToken;
@@ -34,18 +35,16 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Created by Keith Hoopes on 2/3/2016.
+ * Implementation based on the AuthorizationCodeAccessTokenProvider in Spring Security
+ * Provider for obtaining an oauth2 access token by using an authorization code.
  * 
- * Modified AlexB
  */
-public class AzureIdTokenProvider extends AuthorizationCodeAccessTokenProvider {
+public class AzureIdTokenProvider extends OAuth2AccessTokenSupport implements AccessTokenProvider {
 
-    @Override
     public OAuth2AccessToken obtainAccessToken(OAuth2ProtectedResourceDetails details, AccessTokenRequest request)
             throws UserRedirectRequiredException, UserApprovalRequiredException, AccessDeniedException, OAuth2AccessDeniedException {
 
-//        OAuth2AccessToken accessToken = super.obtainAccessToken(details, request);
-		AuthorizationCodeResourceDetails resource = (AuthorizationCodeResourceDetails) details;
+    	AzureResourceDetails resource = getAzureResourceDetails(details);
 
 		if (request.getAuthorizationCode() == null) {
 			if (request.getStateKey() == null) {
@@ -66,22 +65,36 @@ public class AzureIdTokenProvider extends AuthorizationCodeAccessTokenProvider {
         }
         return azureAccessToken;
     }
+
+	private AzureResourceDetails getAzureResourceDetails(OAuth2ProtectedResourceDetails details) {
+		AzureResourceDetails resource = null;
+    	if (details instanceof AzureResourceDetails) {
+    		resource = (AzureResourceDetails) details;
+    	} else {
+    		//Not sure if this is necessary, but just to be on the safe side
+    		resource = new AzureResourceDetails((AuthorizationCodeResourceDetails) details); 
+    	}
+		return resource;
+	}
     
-	private UserRedirectRequiredException getRedirectForAuthorization(AuthorizationCodeResourceDetails resource,
+	private UserRedirectRequiredException getRedirectForAuthorization(AzureResourceDetails resource,
 			AccessTokenRequest request) {
 
 		// we don't have an authorization code yet. So first get that.
 		TreeMap<String, String> requestParameters = new TreeMap<String, String>();
-		requestParameters.put("response_type", "code id_token"); // AZURE AD!
+		requestParameters.put("response_type", resource.getResponseType());
 		requestParameters.put("client_id", resource.getClientId());
 		
-		requestParameters.put("response_mode", "form_post");
-		requestParameters.put("resource", "https://graph.windows.net");
+		requestParameters.put("response_mode", resource.getResponseMode());
+		String serverResource = resource.getResource();
+		if (serverResource != null) {
+			requestParameters.put("resource", serverResource);
+		}
+		//TODO: should the nonce be something different than the state id? do we need to save it somewhere for CSRF validation?
 		requestParameters.put("nonce", java.util.UUID.randomUUID().toString());
 		
 		
 		// Client secret is not required in the initial authorization request
-
 		String redirectUri = resource.getRedirectUri(request);
 		if (redirectUri != null) {
 			requestParameters.put("redirect_uri", redirectUri);
@@ -119,15 +132,59 @@ public class AzureIdTokenProvider extends AuthorizationCodeAccessTokenProvider {
 
 	}
 
+	private MultiValueMap<String, String> getParametersForAuthorizeRequest(AuthorizationCodeResourceDetails resource,
+			AccessTokenRequest request) {
+
+		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+		form.set("response_type", "code id_token");
+		form.set("client_id", resource.getClientId());
+
+		if (request.get("scope") != null) {
+			form.set("scope", request.getFirst("scope"));
+		}
+		else {
+			form.set("scope", OAuth2Utils.formatParameterList(resource.getScope()));
+		}
+
+		// Extracting the redirect URI from a saved request should ignore the current URI, so it's not simply a call to
+		// resource.getRedirectUri()
+		String redirectUri = resource.getPreEstablishedRedirectUri();
+
+		Object preservedState = request.getPreservedState();
+		if (redirectUri == null && preservedState != null) {
+			// no pre-established redirect uri: use the preserved state
+			// TODO: treat redirect URI as a special kind of state (this is a historical mini hack)
+			redirectUri = String.valueOf(preservedState);
+		}
+		else {
+			redirectUri = request.getCurrentUri();
+		}
+
+		String stateKey = request.getStateKey();
+		if (stateKey != null) {
+			form.set("state", stateKey);
+			if (preservedState == null) {
+				throw new InvalidRequestException(
+						"Possible CSRF detected - state parameter was present but no state could be found");
+			}
+		}
+
+		if (redirectUri != null) {
+			form.set("redirect_uri", redirectUri);
+		}
+
+		return form;
+	}	
 	
-	/////		ORIGINAL
-	
+	/*
+	 * ORIGINAL AuthorizationCodeAccessTokenProvider implementation 
+	 */
 
-	private StateKeyGenerator stateKeyGenerator = new DefaultStateKeyGenerator();
+	protected StateKeyGenerator stateKeyGenerator = new DefaultStateKeyGenerator();
 
-	private String scopePrefix = OAuth2Utils.SCOPE_PREFIX;
+	protected String scopePrefix = OAuth2Utils.SCOPE_PREFIX;
 
-	private RequestEnhancer authorizationRequestEnhancer = new DefaultRequestEnhancer();
+	protected RequestEnhancer authorizationRequestEnhancer = new DefaultRequestEnhancer();
 
 	private boolean stateMandatory = true;
 	
@@ -256,7 +313,7 @@ public class AzureIdTokenProvider extends AuthorizationCodeAccessTokenProvider {
 			return retrieveToken(request, resource, form, getHeadersForTokenRequest(request));
 		}
 		catch (OAuth2AccessDeniedException e) {
-			throw getRedirectForAuthorization((AuthorizationCodeResourceDetails) resource, request);
+			throw getRedirectForAuthorization(getAzureResourceDetails(resource), request);
 		}
 	}
 
@@ -313,50 +370,6 @@ public class AzureIdTokenProvider extends AuthorizationCodeAccessTokenProvider {
 
 	}
 
-	private MultiValueMap<String, String> getParametersForAuthorizeRequest(AuthorizationCodeResourceDetails resource,
-			AccessTokenRequest request) {
-
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
-		form.set("response_type", "code id_token");
-		form.set("client_id", resource.getClientId());
-
-		if (request.get("scope") != null) {
-			form.set("scope", request.getFirst("scope"));
-		}
-		else {
-			form.set("scope", OAuth2Utils.formatParameterList(resource.getScope()));
-		}
-
-		// Extracting the redirect URI from a saved request should ignore the current URI, so it's not simply a call to
-		// resource.getRedirectUri()
-		String redirectUri = resource.getPreEstablishedRedirectUri();
-
-		Object preservedState = request.getPreservedState();
-		if (redirectUri == null && preservedState != null) {
-			// no pre-established redirect uri: use the preserved state
-			// TODO: treat redirect URI as a special kind of state (this is a historical mini hack)
-			redirectUri = String.valueOf(preservedState);
-		}
-		else {
-			redirectUri = request.getCurrentUri();
-		}
-
-		String stateKey = request.getStateKey();
-		if (stateKey != null) {
-			form.set("state", stateKey);
-			if (preservedState == null) {
-				throw new InvalidRequestException(
-						"Possible CSRF detected - state parameter was present but no state could be found");
-			}
-		}
-
-		if (redirectUri != null) {
-			form.set("redirect_uri", redirectUri);
-		}
-
-		return form;
-
-	}
 	
 	protected UserApprovalRequiredException getUserApprovalSignal(AuthorizationCodeResourceDetails resource,
 			AccessTokenRequest request) {
