@@ -1,0 +1,82 @@
+{"properties": [
+  {
+    "name": "azure.client.client-id",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.client-id'"
+  },
+  {
+    "name": "azure.client.client-secret",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.client-secret'"
+  },
+  {
+    "name": "azure.client.access-token-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.access-token-uri'"
+  },
+  {
+    "name": "azure.client.user-authorization-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.user-authorization-uri'"
+  },
+  {
+    "name": "azure.client.client-authentication-scheme",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.client-authentication-scheme'"
+  },
+  {
+    "name": "azure.client.response_type",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.response_type'"
+  },
+  {
+    "name": "azure.client.token-name",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.token-name'"
+  },
+  {
+    "name": "azure.client.redirect-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.redirect-uri'"
+  },
+  {
+    "name": "azure.client.response-mode",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.response-mode'"
+  },
+  {
+    "name": "azure.client.resource",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.resource'"
+  },
+  {
+    "name": "azure.client.scope",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.scope'"
+  },
+  {
+    "name": "azure.client.logout-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.logout-uri'"
+  },
+  {
+    "name": "azure.client.logout-redirect-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.logout-redirect-uri'"
+  },
+  {
+    "name": "azure.resource.user-info-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.resource.user-info-uri'"
+  },
+  {
+    "name": "azure.resource.jwt.key-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.resource.jwt.key-uri'"
+  },
+  {
+    "name": "azure.client.prompt",
+    "type": "java.lang.String",
+    "description": "A description for 'azure.client.prompt'"
+  }
+]}

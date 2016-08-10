@@ -1,4 +1,4 @@
-facebook:
+azure:
    client:
      clientId: deea87d5-4fd3-4128-baf0-51a4375698a4
      clientSecret: npIaJFwVFn2KOX7FNoAsDQ3MDEjoch+HJlWelCyJIec=
@@ -11,20 +11,13 @@ facebook:
      responseMode: form_post
      resource: https://graph.windows.net
      scope: openid
+     # optional parameter. possible values: login (disable SSA), none (never prompt, fail if not already logged in Azure) or consent
+     prompt: login
    resource:
      userInfoUri: https://graph.windows.net/me?api-version=1.6
      jwt:
       key-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/discovery/v2.0/keys      
-           
+
 logging:
   level:
     org.springframework.security: DEBUG
-
-    
-security:
-  oauth2:
-    resource:
-      user-info-uri: https://graph.windows.net/me?api-version=1.6
-      token-info-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/v2.0/.well-known/openid-configuration
-      jwt:
-        key-uri: https://login.microsoftonline.com/cegekaBlchTest.onmicrosoft.com/discovery/v2.0/keys      

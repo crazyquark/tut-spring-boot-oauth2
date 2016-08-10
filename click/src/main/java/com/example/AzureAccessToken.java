@@ -13,107 +13,107 @@ import java.util.Map;
 /**
  * Created by Keith Hoopes on 2/3/2016.
  *
- * Represents an OpenID Token retrieved from Azure.
- * Adds some additional information that azure requires,
- * and some that security requires.
+ * Represents an OpenID Token retrieved from Azure. Adds some additional
+ * information that azure requires, and some that security requires.
  */
-public class AzureAccessToken extends DefaultOAuth2AccessToken{
+public class AzureAccessToken extends DefaultOAuth2AccessToken {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final long serialVersionUID = 6552829445321704190L;
 
-    private Date refreshTokenExpiration;
-    private Date notBefore;
-    private AzureProfile profile;
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    public AzureAccessToken(OAuth2AccessToken accessToken) throws IOException {
+  private Date refreshTokenExpiration;
+  private Date notBefore;
+  private AzureProfile profile;
 
-        super(accessToken);
+  public AzureAccessToken(OAuth2AccessToken accessToken) throws IOException {
 
-        DefaultOAuth2AccessToken token;
+    super(accessToken);
 
-        if(accessToken instanceof  DefaultOAuth2AccessToken){
+    DefaultOAuth2AccessToken token;
 
-            token = (DefaultOAuth2AccessToken) accessToken;
+    if (accessToken instanceof DefaultOAuth2AccessToken) {
+
+      token = (DefaultOAuth2AccessToken) accessToken;
+    } else {
+
+      token = new DefaultOAuth2AccessToken(accessToken);
+    }
+    parseAzureTokenInformation(token);
+  }
+
+  private void parseAzureTokenInformation(DefaultOAuth2AccessToken accessToken) throws IOException {
+
+    long now = System.currentTimeMillis();
+    Map<String, Object> info = accessToken.getAdditionalInformation();
+
+    if (info != null && info.size() > 0) {
+
+      if (this.getValue() == null) {
+
+        String idToken = (String) info.get("id_token");
+        this.setValue(idToken);
+      }
+
+      if (this.getExpiration() == null) {
+
+        String expiresInStr = (String) info.get("id_token_expires_in");
+
+        if (expiresInStr != null) {
+
+          long seconds = Long.parseLong(expiresInStr);
+          long milliSeconds = seconds * 1000;
+          Date expiration = new Date(now + milliSeconds);
+
+          accessToken.setExpiration(expiration);
         }
-        else{
+      }
 
-            token = new DefaultOAuth2AccessToken(accessToken);
+      String refreshExpiresInStr = (String) info.get("refresh_token_expires_in");
+      if (refreshExpiresInStr != null) {
+
+        long seconds = Long.parseLong(refreshExpiresInStr);
+        long milliSeconds = seconds * 1000;
+        this.refreshTokenExpiration = new Date(now + milliSeconds);
+      }
+
+      String notBeforeStr = (String) info.get("not_before");
+      if (notBeforeStr != null) {
+
+        long seconds = Long.parseLong(notBeforeStr);
+        long milliSeconds = seconds * 1000;
+        this.notBefore = new Date(now + milliSeconds);
+      }
+
+      String profile64Encoded = (String) info.get("profile_info");
+      if (profile64Encoded != null) {
+        // AlexB: this doesn' seem to be supported by Azure AD Anymore
+        byte[] profileBytes = Base64.decode(profile64Encoded.getBytes());
+
+        try {
+          this.profile = OBJECT_MAPPER.readValue(profileBytes, AzureProfile.class);
+        } catch (JsonParseException e) {
+
+          this.profile = null;
+          // There are times when Azure returns some malformed JSON for the
+          // profile_info.
         }
-        parseAzureTokenInformation(token);
+      }
     }
+  }
 
-    private void parseAzureTokenInformation(DefaultOAuth2AccessToken accessToken) throws IOException {
+  public Date getRefreshTokenExpiration() {
 
-        long now = System.currentTimeMillis();
-        Map<String, Object> info = accessToken.getAdditionalInformation();
+    return refreshTokenExpiration;
+  }
 
-        if (info != null && info.size() > 0) {
+  public AzureProfile getProfile() {
 
-            if (this.getValue() == null) {
+    return profile;
+  }
 
-                String idToken = (String) info.get("id_token");
-                this.setValue(idToken);
-            }
+  public Date getNotBefore() {
 
-            if (this.getExpiration() == null) {
-
-                String expiresInStr = (String) info.get("id_token_expires_in");
-
-                if (expiresInStr != null) {
-
-                    long seconds = Long.parseLong(expiresInStr);
-                    long milliSeconds = seconds * 1000;
-                    Date expiration = new Date(now + milliSeconds);
-
-                    accessToken.setExpiration(expiration);
-                }
-            }
-
-            String refreshExpiresInStr = (String) info.get("refresh_token_expires_in");
-            if (refreshExpiresInStr != null) {
-
-                long seconds = Long.parseLong(refreshExpiresInStr);
-                long milliSeconds = seconds * 1000;
-                this.refreshTokenExpiration = new Date(now + milliSeconds);
-            }
-
-            String notBeforeStr = (String) info.get("not_before");
-            if (notBeforeStr != null) {
-
-                long seconds = Long.parseLong(notBeforeStr);
-                long milliSeconds = seconds * 1000;
-                this.notBefore = new Date(now + milliSeconds);
-            }
-
-            String profile64Encoded = (String) info.get("profile_info");
-            if (profile64Encoded != null) {
-            	//AlexB: this doesn' seem to be supported by Azure AD Anymore
-	            byte[] profileBytes = Base64.decode(profile64Encoded.getBytes());
-	            String profileJson = new String(profileBytes);
-	            try {
-	                this.profile = OBJECT_MAPPER.readValue(profileBytes, AzureProfile.class);
-	            }
-	            catch(JsonParseException e){
-	
-	                this.profile = null;
-	                //There are times when Azure returns some malformed JSON for the profile_info.
-	            }
-            }
-        }
-    }
-
-    public Date getRefreshTokenExpiration() {
-
-        return refreshTokenExpiration;
-    }
-
-    public AzureProfile getProfile() {
-
-        return profile;
-    }
-
-    public Date getNotBefore() {
-
-        return notBefore;
-    }
+    return notBefore;
+  }
 }

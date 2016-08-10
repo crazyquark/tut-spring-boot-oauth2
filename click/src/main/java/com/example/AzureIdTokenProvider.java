@@ -35,348 +35,356 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Implementation based on the AuthorizationCodeAccessTokenProvider in Spring Security
- * Provider for obtaining an oauth2 access token by using an authorization code.
+ * Implementation based on the AuthorizationCodeAccessTokenProvider in Spring
+ * Security Provider for obtaining an oauth2 access token by using an
+ * authorization code.
  * 
  */
 public class AzureIdTokenProvider extends OAuth2AccessTokenSupport implements AccessTokenProvider {
 
-    public OAuth2AccessToken obtainAccessToken(OAuth2ProtectedResourceDetails details, AccessTokenRequest request)
-            throws UserRedirectRequiredException, UserApprovalRequiredException, AccessDeniedException, OAuth2AccessDeniedException {
+  public OAuth2AccessToken obtainAccessToken(OAuth2ProtectedResourceDetails details, AccessTokenRequest request)
+      throws UserRedirectRequiredException, UserApprovalRequiredException, AccessDeniedException,
+      OAuth2AccessDeniedException {
 
-    	AzureResourceDetails resource = getAzureResourceDetails(details);
+    AzureResourceDetails resource = getAzureResourceDetails(details);
 
-		if (request.getAuthorizationCode() == null) {
-			if (request.getStateKey() == null) {
-				throw getRedirectForAuthorization(resource, request);
-			}
-			obtainAuthorizationCode(resource, request);
-		}
-		OAuth2AccessToken accessToken = retrieveToken(request, resource, getParametersForTokenRequest(resource, request),
-				getHeadersForTokenRequest(request));
-    	
-        AzureAccessToken azureAccessToken;
-        try {
-            azureAccessToken = new AzureAccessToken(accessToken);
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-            throw new AccessDeniedException("Could not create AzureAccessToken.",e);
-        }
-        return azureAccessToken;
+    if (request.getAuthorizationCode() == null) {
+      if (request.getStateKey() == null) {
+        throw getRedirectForAuthorization(resource, request);
+      }
+      obtainAuthorizationCode(resource, request);
+    }
+    OAuth2AccessToken accessToken = retrieveToken(request, resource, getParametersForTokenRequest(resource, request),
+        getHeadersForTokenRequest(request));
+
+    AzureAccessToken azureAccessToken;
+    try {
+      azureAccessToken = new AzureAccessToken(accessToken);
+    } catch (IOException e) {
+      e.printStackTrace();
+      throw new AccessDeniedException("Could not create AzureAccessToken.", e);
+    }
+    return azureAccessToken;
+  }
+
+  private AzureResourceDetails getAzureResourceDetails(OAuth2ProtectedResourceDetails details) {
+    AzureResourceDetails resource = null;
+    if (details instanceof AzureResourceDetails) {
+      resource = (AzureResourceDetails) details;
+    } else {
+      // Not sure if this is necessary, but just to be on the safe side
+      resource = new AzureResourceDetails((AuthorizationCodeResourceDetails) details);
+    }
+    return resource;
+  }
+
+  private UserRedirectRequiredException getRedirectForAuthorization(AzureResourceDetails resource,
+      AccessTokenRequest request) {
+
+    // we don't have an authorization code yet. So first get that.
+    TreeMap<String, String> requestParameters = new TreeMap<String, String>();
+    requestParameters.put("response_type", resource.getResponseType());
+    requestParameters.put("client_id", resource.getClientId());
+
+    requestParameters.put("response_mode", resource.getResponseMode());
+    String serverResource = resource.getResource();
+    if (serverResource != null) {
+      requestParameters.put("resource", serverResource);
+    }
+    // TODO: should the nonce be something different than the state id? do we
+    // need to save it somewhere for CSRF validation?
+    requestParameters.put("nonce", java.util.UUID.randomUUID().toString());
+
+    String prompt = resource.getPrompt();
+    if (prompt != null) {
+      requestParameters.put("prompt", prompt);
+    }
+    
+    
+    // Client secret is not required in the initial authorization request
+    String redirectUri = resource.getRedirectUri(request);
+    if (redirectUri != null) {
+      requestParameters.put("redirect_uri", redirectUri);
     }
 
-	private AzureResourceDetails getAzureResourceDetails(OAuth2ProtectedResourceDetails details) {
-		AzureResourceDetails resource = null;
-    	if (details instanceof AzureResourceDetails) {
-    		resource = (AzureResourceDetails) details;
-    	} else {
-    		//Not sure if this is necessary, but just to be on the safe side
-    		resource = new AzureResourceDetails((AuthorizationCodeResourceDetails) details); 
-    	}
-		return resource;
-	}
-    
-	private UserRedirectRequiredException getRedirectForAuthorization(AzureResourceDetails resource,
-			AccessTokenRequest request) {
+    if (resource.isScoped()) {
 
-		// we don't have an authorization code yet. So first get that.
-		TreeMap<String, String> requestParameters = new TreeMap<String, String>();
-		requestParameters.put("response_type", resource.getResponseType());
-		requestParameters.put("client_id", resource.getClientId());
-		
-		requestParameters.put("response_mode", resource.getResponseMode());
-		String serverResource = resource.getResource();
-		if (serverResource != null) {
-			requestParameters.put("resource", serverResource);
-		}
-		//TODO: should the nonce be something different than the state id? do we need to save it somewhere for CSRF validation?
-		requestParameters.put("nonce", java.util.UUID.randomUUID().toString());
-		
-		
-		// Client secret is not required in the initial authorization request
-		String redirectUri = resource.getRedirectUri(request);
-		if (redirectUri != null) {
-			requestParameters.put("redirect_uri", redirectUri);
-		}
+      StringBuilder builder = new StringBuilder();
+      List<String> scope = resource.getScope();
 
-		if (resource.isScoped()) {
+      if (scope != null) {
+        Iterator<String> scopeIt = scope.iterator();
+        while (scopeIt.hasNext()) {
+          builder.append(scopeIt.next());
+          if (scopeIt.hasNext()) {
+            builder.append(' ');
+          }
+        }
+      }
 
-			StringBuilder builder = new StringBuilder();
-			List<String> scope = resource.getScope();
+      requestParameters.put("scope", builder.toString());
+    }
 
-			if (scope != null) {
-				Iterator<String> scopeIt = scope.iterator();
-				while (scopeIt.hasNext()) {
-					builder.append(scopeIt.next());
-					if (scopeIt.hasNext()) {
-						builder.append(' ');
-					}
-				}
-			}
+    UserRedirectRequiredException redirectException = new UserRedirectRequiredException(
+        resource.getUserAuthorizationUri(), requestParameters);
 
-			requestParameters.put("scope", builder.toString());
-		}
+    String stateKey = stateKeyGenerator.generateKey(resource);
+    redirectException.setStateKey(stateKey);
+    request.setStateKey(stateKey);
 
-		UserRedirectRequiredException redirectException = new UserRedirectRequiredException(
-				resource.getUserAuthorizationUri(), requestParameters);
+    redirectException.setStateToPreserve(redirectUri);
+    request.setPreservedState(redirectUri);
 
-		String stateKey = stateKeyGenerator.generateKey(resource);
-		redirectException.setStateKey(stateKey);
-		request.setStateKey(stateKey);
-		
-		redirectException.setStateToPreserve(redirectUri);
-		request.setPreservedState(redirectUri);
+    return redirectException;
 
-		return redirectException;
+  }
 
-	}
+  private MultiValueMap<String, String> getParametersForAuthorizeRequest(AuthorizationCodeResourceDetails resource,
+      AccessTokenRequest request) {
 
-	private MultiValueMap<String, String> getParametersForAuthorizeRequest(AuthorizationCodeResourceDetails resource,
-			AccessTokenRequest request) {
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+    form.set("response_type", "code id_token");
+    form.set("client_id", resource.getClientId());
 
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
-		form.set("response_type", "code id_token");
-		form.set("client_id", resource.getClientId());
+    if (request.get("scope") != null) {
+      form.set("scope", request.getFirst("scope"));
+    } else {
+      form.set("scope", OAuth2Utils.formatParameterList(resource.getScope()));
+    }
 
-		if (request.get("scope") != null) {
-			form.set("scope", request.getFirst("scope"));
-		}
-		else {
-			form.set("scope", OAuth2Utils.formatParameterList(resource.getScope()));
-		}
+    // Extracting the redirect URI from a saved request should ignore the
+    // current URI, so it's not simply a call to
+    // resource.getRedirectUri()
+    String redirectUri = resource.getPreEstablishedRedirectUri();
 
-		// Extracting the redirect URI from a saved request should ignore the current URI, so it's not simply a call to
-		// resource.getRedirectUri()
-		String redirectUri = resource.getPreEstablishedRedirectUri();
+    Object preservedState = request.getPreservedState();
+    if (redirectUri == null && preservedState != null) {
+      // no pre-established redirect uri: use the preserved state
+      // TODO: treat redirect URI as a special kind of state (this is a
+      // historical mini hack)
+      redirectUri = String.valueOf(preservedState);
+    } else {
+      redirectUri = request.getCurrentUri();
+    }
 
-		Object preservedState = request.getPreservedState();
-		if (redirectUri == null && preservedState != null) {
-			// no pre-established redirect uri: use the preserved state
-			// TODO: treat redirect URI as a special kind of state (this is a historical mini hack)
-			redirectUri = String.valueOf(preservedState);
-		}
-		else {
-			redirectUri = request.getCurrentUri();
-		}
+    String stateKey = request.getStateKey();
+    if (stateKey != null) {
+      form.set("state", stateKey);
+      if (preservedState == null) {
+        throw new InvalidRequestException(
+            "Possible CSRF detected - state parameter was present but no state could be found");
+      }
+    }
 
-		String stateKey = request.getStateKey();
-		if (stateKey != null) {
-			form.set("state", stateKey);
-			if (preservedState == null) {
-				throw new InvalidRequestException(
-						"Possible CSRF detected - state parameter was present but no state could be found");
-			}
-		}
+    if (redirectUri != null) {
+      form.set("redirect_uri", redirectUri);
+    }
 
-		if (redirectUri != null) {
-			form.set("redirect_uri", redirectUri);
-		}
+    return form;
+  }
 
-		return form;
-	}	
-	
-	/*
-	 * ORIGINAL AuthorizationCodeAccessTokenProvider implementation 
-	 */
+  /*
+   * ORIGINAL AuthorizationCodeAccessTokenProvider implementation
+   */
 
-	protected StateKeyGenerator stateKeyGenerator = new DefaultStateKeyGenerator();
+  protected StateKeyGenerator stateKeyGenerator = new DefaultStateKeyGenerator();
 
-	protected String scopePrefix = OAuth2Utils.SCOPE_PREFIX;
+  protected String scopePrefix = OAuth2Utils.SCOPE_PREFIX;
 
-	protected RequestEnhancer authorizationRequestEnhancer = new DefaultRequestEnhancer();
+  protected RequestEnhancer authorizationRequestEnhancer = new DefaultRequestEnhancer();
 
-	private boolean stateMandatory = true;
-	
-	/**
-	 * Flag to say that the use of state parameter is mandatory.
-	 * 
-	 * @param stateMandatory the flag value (default true)
-	 */
-	public void setStateMandatory(boolean stateMandatory) {
-		this.stateMandatory = stateMandatory;
-	}
+  private boolean stateMandatory = true;
 
-	/**
-	 * A custom enhancer for the authorization request
-	 * @param authorizationRequestEnhancer
-	 */
-	public void setAuthorizationRequestEnhancer(RequestEnhancer authorizationRequestEnhancer) {
-		this.authorizationRequestEnhancer = authorizationRequestEnhancer;
-	}
+  /**
+   * Flag to say that the use of state parameter is mandatory.
+   * 
+   * @param stateMandatory
+   *          the flag value (default true)
+   */
+  public void setStateMandatory(boolean stateMandatory) {
+    this.stateMandatory = stateMandatory;
+  }
 
-	/**
-	 * Prefix for scope approval parameters.
-	 * 
-	 * @param scopePrefix
-	 */
-	public void setScopePrefix(String scopePrefix) {
-		this.scopePrefix = scopePrefix;
-	}
+  /**
+   * A custom enhancer for the authorization request
+   * 
+   * @param authorizationRequestEnhancer
+   */
+  public void setAuthorizationRequestEnhancer(RequestEnhancer authorizationRequestEnhancer) {
+    this.authorizationRequestEnhancer = authorizationRequestEnhancer;
+  }
 
-	/**
-	 * @param stateKeyGenerator the stateKeyGenerator to set
-	 */
-	public void setStateKeyGenerator(StateKeyGenerator stateKeyGenerator) {
-		this.stateKeyGenerator = stateKeyGenerator;
-	}
+  /**
+   * Prefix for scope approval parameters.
+   * 
+   * @param scopePrefix
+   */
+  public void setScopePrefix(String scopePrefix) {
+    this.scopePrefix = scopePrefix;
+  }
 
-	public boolean supportsResource(OAuth2ProtectedResourceDetails resource) {
-		return resource instanceof AuthorizationCodeResourceDetails
-				&& "authorization_code".equals(resource.getGrantType());
-	}
+  /**
+   * @param stateKeyGenerator
+   *          the stateKeyGenerator to set
+   */
+  public void setStateKeyGenerator(StateKeyGenerator stateKeyGenerator) {
+    this.stateKeyGenerator = stateKeyGenerator;
+  }
 
-	public boolean supportsRefresh(OAuth2ProtectedResourceDetails resource) {
-		return supportsResource(resource);
-	}
+  public boolean supportsResource(OAuth2ProtectedResourceDetails resource) {
+    return resource instanceof AuthorizationCodeResourceDetails && "authorization_code".equals(resource.getGrantType());
+  }
 
-	public String obtainAuthorizationCode(OAuth2ProtectedResourceDetails details, AccessTokenRequest request)
-			throws UserRedirectRequiredException, UserApprovalRequiredException, AccessDeniedException,
-			OAuth2AccessDeniedException {
+  public boolean supportsRefresh(OAuth2ProtectedResourceDetails resource) {
+    return supportsResource(resource);
+  }
 
-		AuthorizationCodeResourceDetails resource = (AuthorizationCodeResourceDetails) details;
+  public String obtainAuthorizationCode(OAuth2ProtectedResourceDetails details, AccessTokenRequest request)
+      throws UserRedirectRequiredException, UserApprovalRequiredException, AccessDeniedException,
+      OAuth2AccessDeniedException {
 
-		HttpHeaders headers = getHeadersForAuthorizationRequest(request);
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
-		if (request.containsKey(OAuth2Utils.USER_OAUTH_APPROVAL)) {
-			form.set(OAuth2Utils.USER_OAUTH_APPROVAL, request.getFirst(OAuth2Utils.USER_OAUTH_APPROVAL));
-			for (String scope : details.getScope()) {
-				form.set(scopePrefix + scope, request.getFirst(OAuth2Utils.USER_OAUTH_APPROVAL));
-			}
-		}
-		else {
-			form.putAll(getParametersForAuthorizeRequest(resource, request));
-		}
-		authorizationRequestEnhancer.enhance(request, resource, form, headers);
-		final AccessTokenRequest copy = request;
+    AuthorizationCodeResourceDetails resource = (AuthorizationCodeResourceDetails) details;
 
-		final ResponseExtractor<ResponseEntity<Void>> delegate = getAuthorizationResponseExtractor();
-		ResponseExtractor<ResponseEntity<Void>> extractor = new ResponseExtractor<ResponseEntity<Void>>() {
-			@Override
-			public ResponseEntity<Void> extractData(ClientHttpResponse response) throws IOException {
-				if (response.getHeaders().containsKey("Set-Cookie")) {
-					copy.setCookie(response.getHeaders().getFirst("Set-Cookie"));
-				}
-				return delegate.extractData(response);
-			}
-		};
-		// Instead of using restTemplate.exchange we use an explicit response extractor here so it can be overridden by
-		// subclasses
-		ResponseEntity<Void> response = getRestTemplate().execute(resource.getUserAuthorizationUri(), HttpMethod.POST,
-				getRequestCallback(resource, form, headers), extractor, form.toSingleValueMap());
+    HttpHeaders headers = getHeadersForAuthorizationRequest(request);
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+    if (request.containsKey(OAuth2Utils.USER_OAUTH_APPROVAL)) {
+      form.set(OAuth2Utils.USER_OAUTH_APPROVAL, request.getFirst(OAuth2Utils.USER_OAUTH_APPROVAL));
+      for (String scope : details.getScope()) {
+        form.set(scopePrefix + scope, request.getFirst(OAuth2Utils.USER_OAUTH_APPROVAL));
+      }
+    } else {
+      form.putAll(getParametersForAuthorizeRequest(resource, request));
+    }
+    authorizationRequestEnhancer.enhance(request, resource, form, headers);
+    final AccessTokenRequest copy = request;
 
-		if (response.getStatusCode() == HttpStatus.OK) {
-			// Need to re-submit with approval...
-			throw getUserApprovalSignal(resource, request);
-		}
+    final ResponseExtractor<ResponseEntity<Void>> delegate = getAuthorizationResponseExtractor();
+    ResponseExtractor<ResponseEntity<Void>> extractor = new ResponseExtractor<ResponseEntity<Void>>() {
+      @Override
+      public ResponseEntity<Void> extractData(ClientHttpResponse response) throws IOException {
+        if (response.getHeaders().containsKey("Set-Cookie")) {
+          copy.setCookie(response.getHeaders().getFirst("Set-Cookie"));
+        }
+        return delegate.extractData(response);
+      }
+    };
+    // Instead of using restTemplate.exchange we use an explicit response
+    // extractor here so it can be overridden by
+    // subclasses
+    ResponseEntity<Void> response = getRestTemplate().execute(resource.getUserAuthorizationUri(), HttpMethod.POST,
+        getRequestCallback(resource, form, headers), extractor, form.toSingleValueMap());
 
-		URI location = response.getHeaders().getLocation();
-		String query = location.getQuery();
-		Map<String, String> map = OAuth2Utils.extractMap(query);
-		if (map.containsKey("state")) {
-			request.setStateKey(map.get("state"));
-			if (request.getPreservedState() == null) {
-				String redirectUri = resource.getRedirectUri(request);
-				if (redirectUri != null) {
-					request.setPreservedState(redirectUri);
-				}
-				else {
-					request.setPreservedState(new Object());
-				}
-			}
-		}
+    if (response.getStatusCode() == HttpStatus.OK) {
+      // Need to re-submit with approval...
+      throw getUserApprovalSignal(resource, request);
+    }
 
-		String code = map.get("code");
-		if (code == null) {
-			throw new UserRedirectRequiredException(location.toString(), form.toSingleValueMap());
-		}
-		request.set("code", code);
-		return code;
+    URI location = response.getHeaders().getLocation();
+    String query = location.getQuery();
+    Map<String, String> map = OAuth2Utils.extractMap(query);
+    if (map.containsKey("state")) {
+      request.setStateKey(map.get("state"));
+      if (request.getPreservedState() == null) {
+        String redirectUri = resource.getRedirectUri(request);
+        if (redirectUri != null) {
+          request.setPreservedState(redirectUri);
+        } else {
+          request.setPreservedState(new Object());
+        }
+      }
+    }
 
-	}
+    String code = map.get("code");
+    if (code == null) {
+      throw new UserRedirectRequiredException(location.toString(), form.toSingleValueMap());
+    }
+    request.set("code", code);
+    return code;
 
-	protected ResponseExtractor<ResponseEntity<Void>> getAuthorizationResponseExtractor() {
-		return new ResponseExtractor<ResponseEntity<Void>>() {
-			public ResponseEntity<Void> extractData(ClientHttpResponse response) throws IOException {
-				return new ResponseEntity<Void>(response.getHeaders(), response.getStatusCode());
-			}
-		};
-	}
+  }
 
-	public OAuth2AccessToken refreshAccessToken(OAuth2ProtectedResourceDetails resource,
-			OAuth2RefreshToken refreshToken, AccessTokenRequest request) throws UserRedirectRequiredException,
-			OAuth2AccessDeniedException {
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
-		form.add("grant_type", "refresh_token");
-		form.add("refresh_token", refreshToken.getValue());
-		try {
-			return retrieveToken(request, resource, form, getHeadersForTokenRequest(request));
-		}
-		catch (OAuth2AccessDeniedException e) {
-			throw getRedirectForAuthorization(getAzureResourceDetails(resource), request);
-		}
-	}
+  protected ResponseExtractor<ResponseEntity<Void>> getAuthorizationResponseExtractor() {
+    return new ResponseExtractor<ResponseEntity<Void>>() {
+      public ResponseEntity<Void> extractData(ClientHttpResponse response) throws IOException {
+        return new ResponseEntity<Void>(response.getHeaders(), response.getStatusCode());
+      }
+    };
+  }
 
-	private HttpHeaders getHeadersForTokenRequest(AccessTokenRequest request) {
-		HttpHeaders headers = new HttpHeaders();
-		// No cookie for token request
-		return headers;
-	}
+  public OAuth2AccessToken refreshAccessToken(OAuth2ProtectedResourceDetails resource, OAuth2RefreshToken refreshToken,
+      AccessTokenRequest request) throws UserRedirectRequiredException, OAuth2AccessDeniedException {
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+    form.add("grant_type", "refresh_token");
+    form.add("refresh_token", refreshToken.getValue());
+    try {
+      return retrieveToken(request, resource, form, getHeadersForTokenRequest(request));
+    } catch (OAuth2AccessDeniedException e) {
+      throw getRedirectForAuthorization(getAzureResourceDetails(resource), request);
+    }
+  }
 
-	private HttpHeaders getHeadersForAuthorizationRequest(AccessTokenRequest request) {
-		HttpHeaders headers = new HttpHeaders();
-		headers.putAll(request.getHeaders());
-		if (request.getCookie() != null) {
-			headers.set("Cookie", request.getCookie());
-		}
-		return headers;
-	}
+  private HttpHeaders getHeadersForTokenRequest(AccessTokenRequest request) {
+    HttpHeaders headers = new HttpHeaders();
+    // No cookie for token request
+    return headers;
+  }
 
-	private MultiValueMap<String, String> getParametersForTokenRequest(AuthorizationCodeResourceDetails resource,
-			AccessTokenRequest request) {
+  private HttpHeaders getHeadersForAuthorizationRequest(AccessTokenRequest request) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.putAll(request.getHeaders());
+    if (request.getCookie() != null) {
+      headers.set("Cookie", request.getCookie());
+    }
+    return headers;
+  }
 
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
-		form.set("grant_type", "authorization_code");
-		form.set("code", request.getAuthorizationCode());
+  private MultiValueMap<String, String> getParametersForTokenRequest(AuthorizationCodeResourceDetails resource,
+      AccessTokenRequest request) {
 
-		Object preservedState = request.getPreservedState();
-		if (request.getStateKey() != null || stateMandatory) {
-			// The token endpoint has no use for the state so we don't send it back, but we are using it
-			// for CSRF detection client side...
-			if (preservedState == null) {
-				throw new InvalidRequestException(
-						"Possible CSRF detected - state parameter was required but no state could be found");
-			}
-		}
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+    form.set("grant_type", "authorization_code");
+    form.set("code", request.getAuthorizationCode());
 
-		// Extracting the redirect URI from a saved request should ignore the current URI, so it's not simply a call to
-		// resource.getRedirectUri()
-		String redirectUri = null;
-		// Get the redirect uri from the stored state
-		if (preservedState instanceof String) {
-			// Use the preserved state in preference if it is there
-			// TODO: treat redirect URI as a special kind of state (this is a historical mini hack)
-			redirectUri = String.valueOf(preservedState);
-		}
-		else {
-			redirectUri = resource.getRedirectUri(request);
-		}
+    Object preservedState = request.getPreservedState();
+    if (request.getStateKey() != null || stateMandatory) {
+      // The token endpoint has no use for the state so we don't send it back,
+      // but we are using it
+      // for CSRF detection client side...
+      if (preservedState == null) {
+        throw new InvalidRequestException(
+            "Possible CSRF detected - state parameter was required but no state could be found");
+      }
+    }
 
-		if (redirectUri != null && !"NONE".equals(redirectUri)) {
-			form.set("redirect_uri", redirectUri);
-		}
+    // Extracting the redirect URI from a saved request should ignore the
+    // current URI, so it's not simply a call to
+    // resource.getRedirectUri()
+    String redirectUri = null;
+    // Get the redirect uri from the stored state
+    if (preservedState instanceof String) {
+      // Use the preserved state in preference if it is there
+      // TODO: treat redirect URI as a special kind of state (this is a
+      // historical mini hack)
+      redirectUri = String.valueOf(preservedState);
+    } else {
+      redirectUri = resource.getRedirectUri(request);
+    }
 
-		return form;
+    if (redirectUri != null && !"NONE".equals(redirectUri)) {
+      form.set("redirect_uri", redirectUri);
+    }
 
-	}
+    return form;
 
-	
-	protected UserApprovalRequiredException getUserApprovalSignal(AuthorizationCodeResourceDetails resource,
-			AccessTokenRequest request) {
-		String message = String.format("Do you approve the client '%s' to access your resources with scope=%s",
-				resource.getClientId(), resource.getScope());
-		return new UserApprovalRequiredException(resource.getUserAuthorizationUri(), Collections.singletonMap(
-				OAuth2Utils.USER_OAUTH_APPROVAL, message), resource.getClientId(), resource.getScope());
-	}
-	
+  }
+
+  protected UserApprovalRequiredException getUserApprovalSignal(AuthorizationCodeResourceDetails resource,
+      AccessTokenRequest request) {
+    String message = String.format("Do you approve the client '%s' to access your resources with scope=%s",
+        resource.getClientId(), resource.getScope());
+    return new UserApprovalRequiredException(resource.getUserAuthorizationUri(),
+        Collections.singletonMap(OAuth2Utils.USER_OAUTH_APPROVAL, message), resource.getClientId(),
+        resource.getScope());
+  }
+
 }
